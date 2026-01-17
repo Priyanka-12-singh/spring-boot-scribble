@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Scribble Clone</title>
+</head>
+<body>
+<h1>Scribble.io Clone 🎨</h1>
+
+<input id="playerName" placeholder="Enter your name"/>
+<button onclick="registerPlayer()">Join Game</button>
+<br><br>
+
+<input id="guess" placeholder="Enter your guess"/>
+<button onclick="sendGuess()">Send Guess</button>
+
+<canvas id="board" width="600" height="400" style="border:1px solid black;"></canvas>
+<br><br>
+
+
+<h2>Guesses:</h2>
+<ul id="guesses"></ul>
+
+<script>
+    function registerPlayer() {
+        const name = document.getElementById("playerName").value;
+        fetch("/api/game/player?name=" + name, {method:"POST"})
+            .then(res => res.json())
+            .then(data => alert("Player registered: " + data.name));
+    }
+
+    function sendGuess() {
+        const guess = document.getElementById("guess").value;
+        const playerName = document.getElementById("playerName").value;
+        fetch(`/api/game/guess?guess=${guess}&playerName=${playerName}`, {method:"POST"})
+            .then(res => res.json())
+            .then(data => loadGuesses());
+    }
+
+    function loadGuesses() {
+        fetch("/api/game/guesses")
+            .then(res => res.json())
+            .then(data => {
+                const list = document.getElementById("guesses");
+                list.innerHTML = "";
+                data.forEach(g => {
+                    const li = document.createElement("li");
+                    li.innerText = g.playerName + ": " + g.guess;
+                    list.appendChild(li);
+                });
+            });
+    }
+    // === Canvas Drawing Logic ===
+    const canvas = document.getElementById("board");
+    const ctx = canvas.getContext("2d");
+    let drawing = false;
+    let lastX = 0;
+    let lastY = 0;
+
+    canvas.addEventListener("mousedown", (e) => {
+        drawing = true;
+        lastX = e.offsetX;
+        lastY = e.offsetY;
+    });
+
+    canvas.addEventListener("mouseup", () => {
+        drawing = false;
+    });
+
+    canvas.addEventListener("mousemove", (e) => {
+        if (!drawing) return;
+        const newX = e.offsetX;
+        const newY = e.offsetY;
+
+        // Draw locally
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(newX, newY);
+        ctx.strokeStyle = "black";
+        ctx.stroke();
+
+        // Send stroke to backend
+        fetch("/api/game/stroke", {
+            method: "POST",
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                startX: lastX,
+                startY: lastY,
+                endX: newX,
+                endY: newY,
+                color: "black"
+            })
+        });
+
+        lastX = newX;
+        lastY = newY;
+    });
+
+    function loadStrokes() {
+        fetch("/api/game/strokes")
+            .then(res => res.json())
+            .then(data => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                data.forEach(s => {
+                    ctx.beginPath();
+                    ctx.moveTo(s.startX, s.startY);
+                    ctx.lineTo(s.endX, s.endY);
+                    ctx.strokeStyle = s.color;
+                    ctx.stroke();
+                });
+            });
+    }
+
+    setInterval(loadStrokes, 3000); // refresh strokes every 3s
+
+
+    setInterval(loadGuesses, 3000); // refresh guesses every 3s
+</script>
+</body>
+</html>
